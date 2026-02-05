@@ -1,4 +1,5 @@
 use crate::algorithms::HpkeAlgorithm;
+use crate::protected_mem::Vault;
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -27,11 +28,6 @@ pub struct KeyMetadata {
     pub created_at: Instant,
     pub delete_after: Instant, // TTL-bound deletion time
     pub spec: KeySpec,         // (non-secret) Cryptographic material
-}
-
-#[derive(Debug)] // zerioize components before dropping
-pub struct Vault {
-    // placeholder
 }
 
 #[derive(Debug)]
