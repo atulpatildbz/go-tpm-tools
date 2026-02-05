@@ -107,7 +107,10 @@ mod tests {
         assert_eq!(vault.as_bytes(), &original_data);
         assert_eq!(vault.as_ref(), &original_data);
         assert_ne!(data, original_data, "Source data should be zeroed");
-        assert!(data.iter().all(|&b| b == 0), "Source data should be all zeros");
+        assert!(
+            data.iter().all(|&b| b == 0),
+            "Source data should be all zeros"
+        );
     }
 
     #[test]
@@ -145,7 +148,6 @@ mod tests {
         let mut statfs: libc::statfs = unsafe { std::mem::zeroed() };
         let ret = unsafe { libc::fstatfs(fd, &mut statfs) };
         assert_eq!(ret, 0, "fstatfs failed");
-
         // SECRETMEM_MAGIC is 0x5345434d ("SECM")
         const SECRETMEM_MAGIC: libc::c_long = 0x5345434d;
         assert_eq!(
