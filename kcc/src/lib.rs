@@ -1,7 +1,6 @@
-mod vault;
-mod types;
-mod error;
-mod ffi;
+pub mod vault;
+pub mod types;
+pub mod error;
 
 use bssl_crypto::hpke;
 use clear_on_drop::clear_stack_on_return;

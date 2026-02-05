@@ -1,13 +1,15 @@
+[workspace]
+members = ["kps_kcc", "wsd_kcc"]
+
 [package]
 name = "kcc"
 version = "0.1.0"
 edition = "2024"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [dependencies]
-once_cell = "1.18"
 clear_on_drop = "0.2.5"
 uuid = { version = "1.3", features = ["v4"] }
 zeroize = "1.8.2"
