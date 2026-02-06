@@ -87,6 +87,26 @@ jobs:
       - name: Test all modules except launcher
         run: go test -v ./... ./cmd/... ./verifier/... -skip='TestCacheConcurrentSetGet|TestHwAttestationPass|TestHardwareAttestationPass'
 
+  keymanager-rust:
+    name: Keymanager Rust Build (ubuntu-latest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - name: Install Rust toolchain (stable) via rustup
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+          cargo --version
+      - name: Install Linux packages
+        run: sudo apt-get update && sudo apt-get -y install cmake ninja-build libclang-dev
+      - name: Install bindgen-cli
+        run: cargo install bindgen-cli --locked
+      - name: Build keymanager workspace with explicit BoringSSL prebuild
+        run: ./keymanager/scripts/build_rust_workspace.sh build --workspace --release
+
   lint:
     strategy:
       matrix:
