@@ -60,17 +60,24 @@ pub unsafe extern "C" fn key_manager_generate_binding_keypair(
     expiry_secs: u64,
     out_uuid: *mut u8,
     out_pubkey: *mut u8,
-    out_pubkey_len: usize,
+    out_pubkey_len: *mut usize,
 ) -> i32 {
     // Safety Invariant Checks
-    if out_pubkey.is_null() || out_uuid.is_null() || algo_ptr.is_null() || algo_len == 0 {
+    if out_pubkey.is_null()
+        || out_uuid.is_null()
+        || algo_ptr.is_null()
+        || algo_len == 0
+        || out_pubkey_len.is_null()
+    {
         return -1;
     }
 
     // Convert to Safe Types
     let algo_slice = unsafe { slice::from_raw_parts(algo_ptr, algo_len) };
     let out_uuid = unsafe { slice::from_raw_parts_mut(out_uuid, 16) };
-    let out_pubkey = unsafe { slice::from_raw_parts_mut(out_pubkey, out_pubkey_len) };
+    // We cannot verify pubkey length safely without dereferencing out_pubkey_len
+    let pubkey_capacity = unsafe { *out_pubkey_len };
+    let out_pubkey = unsafe { slice::from_raw_parts_mut(out_pubkey, pubkey_capacity) };
 
     let algo = match HpkeAlgorithm::decode(algo_slice) {
         Ok(a) => a,
@@ -80,14 +87,57 @@ pub unsafe extern "C" fn key_manager_generate_binding_keypair(
     // Call Safe Internal Function
     match generate_binding_keypair_internal(algo, expiry_secs) {
         Ok((id, pubkey)) => {
-            if out_pubkey_len != pubkey.as_bytes().len() {
+            let actual_len = pubkey.as_bytes().len();
+            if pubkey_capacity < actual_len {
                 return -2;
             }
+            unsafe { *out_pubkey_len = actual_len };
             out_uuid.copy_from_slice(id.as_bytes());
-            out_pubkey.copy_from_slice(pubkey.as_bytes());
+            out_pubkey[..actual_len].copy_from_slice(pubkey.as_bytes());
             0 // Success
         }
         Err(e) => e,
+    }
+}
+
+/// Destroys the binding key associated with the given UUID.
+///
+/// ## Arguments
+/// * `uuid_bytes` - A pointer to a 16-byte buffer containing the key UUID.
+///
+/// ## Safety
+/// This function is unsafe because it dereferences the provided raw pointer.
+/// The caller must ensure that `uuid_bytes` points to a valid 16-byte buffer.
+///
+/// ## Returns
+/// * `0` on success.
+/// * `-1` if the UUID pointer is null or the key was not found.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn key_manager_open(
+    _uuid_bytes: *const u8,
+    _enc: *const u8,
+    _enc_len: usize,
+    _ciphertext: *const u8,
+    _ciphertext_len: usize,
+    _aad: *const u8,
+    _aad_len: usize,
+    _out_plaintext: *mut u8,
+    _out_plaintext_len: *mut usize,
+) -> i32 {
+    -1 // Not implemented
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn key_manager_destroy_binding_key(uuid_bytes: *const u8) -> i32 {
+    if uuid_bytes.is_null() {
+        return -1;
+    }
+    let bytes = unsafe { slice::from_raw_parts(uuid_bytes, 16) };
+    let uuid = Uuid::from_bytes(bytes.try_into().expect("invalid UUID bytes"));
+
+    match KEY_REGISTRY.remove_key(&uuid) {
+        Some(_) => 0, // Success
+        None => -1,   // Not found
     }
 }
 
@@ -118,7 +168,7 @@ mod tests {
     fn test_generate_binding_keypair_ffi_success() {
         let mut uuid_bytes = [0u8; 16];
         let mut pubkey_bytes = [0u8; 32];
-        let pubkey_len: usize = pubkey_bytes.len();
+        let mut pubkey_len = pubkey_bytes.len();
         let algo = HpkeAlgorithm {
             kem: KemAlgorithm::DhkemX25519HkdfSha256 as i32,
             kdf: KdfAlgorithm::HkdfSha256 as i32,
@@ -133,7 +183,7 @@ mod tests {
                 3600,
                 uuid_bytes.as_mut_ptr(),
                 pubkey_bytes.as_mut_ptr(),
-                pubkey_len,
+                &mut pubkey_len,
             )
         };
 
@@ -147,7 +197,7 @@ mod tests {
     fn test_generate_binding_keypair_invalid_algo() {
         let mut uuid_bytes = [0u8; 16];
         let mut pubkey_bytes = [0u8; 32];
-        let pubkey_len: usize = pubkey_bytes.len();
+        let mut pubkey_len = pubkey_bytes.len();
         // Invalid protobuf bytes
         let algo_bytes = vec![0xFF, 0xFF];
 
@@ -158,7 +208,7 @@ mod tests {
                 3600,
                 uuid_bytes.as_mut_ptr(),
                 pubkey_bytes.as_mut_ptr(),
-                pubkey_len,
+                &mut pubkey_len,
             )
         };
 
@@ -183,7 +233,7 @@ mod tests {
                 3600,
                 std::ptr::null_mut(),
                 std::ptr::null_mut(),
-                0,
+                std::ptr::null_mut(),
             )
         };
 
@@ -194,7 +244,7 @@ mod tests {
     fn test_generate_binding_keypair_invalid_pubkey_len() {
         let mut uuid_bytes = [0u8; 16];
         let mut pubkey_bytes = [0u8; 64];
-        let pubkey_len: usize = pubkey_bytes.len();
+        let mut pubkey_len = pubkey_bytes.len();
         let algo = HpkeAlgorithm {
             kem: KemAlgorithm::DhkemX25519HkdfSha256 as i32,
             kdf: KdfAlgorithm::HkdfSha256 as i32,
@@ -209,7 +259,7 @@ mod tests {
                 3600,
                 uuid_bytes.as_mut_ptr(),
                 pubkey_bytes.as_mut_ptr(),
-                pubkey_len,
+                &mut pubkey_len,
             )
         };
 
