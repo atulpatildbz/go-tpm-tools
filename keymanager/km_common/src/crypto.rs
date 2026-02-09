@@ -2,6 +2,7 @@ use crate::algorithms::{AeadAlgorithm, HpkeAlgorithm, KdfAlgorithm, KemAlgorithm
 use bssl_crypto::{hkdf, hpke, x25519};
 use clear_on_drop::clear_stack_on_return;
 use thiserror::Error;
+use zeroize::{ZeroizeOnDrop, Zeroizing};
 
 const CLEAR_STACK_PAGES: usize = 2;
 
@@ -22,7 +23,7 @@ impl From<Vec<u8>> for PublicKey {
 }
 
 /// A wrapper around a private key to avoid mixing with public keys.
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, ZeroizeOnDrop)]
 pub struct PrivateKey(pub Vec<u8>);
 
 impl AsRef<[u8]> for PrivateKey {
@@ -76,9 +77,11 @@ pub fn decaps_x25519(priv_key: &PrivateKey, enc: &[u8]) -> Result<Vec<u8>, Error
         );
 
         // Compute Diffie-Hellman shared secret
-        let shared_key = priv_key
-            .compute_shared_key(enc.try_into().map_err(|_| Error::KeyLenMismatch)?)
-            .ok_or(Error::DecapsError)?;
+        let shared_key = Zeroizing::new(
+            priv_key
+                .compute_shared_key(enc.try_into().map_err(|_| Error::KeyLenMismatch)?)
+                .ok_or(Error::DecapsError)?,
+        );
 
         // DHKEM(X25519, HKDF-SHA256)
         // LabeledExtract(salt, label, ikm) = HKDF-Extract(salt, "HPKE-v1" || suite_id || label || ikm)
@@ -87,26 +90,36 @@ pub fn decaps_x25519(priv_key: &PrivateKey, enc: &[u8]) -> Result<Vec<u8>, Error
 
         // Extract eae_prk
         // labeled_ikm = "HPKE-v1" || suite_id || "eae_prk" || shared_key
-        let labeled_ikm = [b"HPKE-v1".as_slice(), &suite_id, b"eae_prk", &shared_key].concat();
+        let labeled_ikm = Zeroizing::new(
+            [
+                b"HPKE-v1".as_slice(),
+                &suite_id,
+                b"eae_prk",
+                shared_key.as_ref(),
+            ]
+            .concat(),
+        );
 
-        let prk = hkdf::HkdfSha256::extract(&labeled_ikm, hkdf::Salt::None);
+        let prk = hkdf::HkdfSha256::extract(labeled_ikm.as_ref(), hkdf::Salt::None);
 
         let pub_key = priv_key.to_public();
 
         // Expand shared_secret
         // labeled_info = I2OSP(L, 2) || "HPKE-v1" || suite_id || "shared_secret" || enc || pkR
-        let labeled_info = [
-            &[0x00u8, 0x20] as &[u8], // L = 32
-            b"HPKE-v1",
-            &suite_id,
-            b"shared_secret",
-            enc,
-            &pub_key,
-        ]
-        .concat();
+        let labeled_info = Zeroizing::new(
+            [
+                &[0x00u8, 0x20] as &[u8], // L = 32
+                b"HPKE-v1",
+                &suite_id,
+                b"shared_secret",
+                enc,
+                pub_key.as_ref(),
+            ]
+            .concat(),
+        );
 
         let mut result = vec![0u8; 32];
-        prk.expand_into(&labeled_info, &mut result)
+        prk.expand_into(labeled_info.as_ref(), &mut result)
             .map_err(|_| Error::DecapsError)?;
 
         Ok(result)
