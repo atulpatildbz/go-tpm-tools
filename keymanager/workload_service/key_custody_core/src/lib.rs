@@ -1,4 +1,5 @@
 use km_common::algorithms::HpkeAlgorithm;
+use km_common::ffi::KmHpkeAlgorithm;
 use km_common::key_types::{KeyRecord, KeyRegistry, KeySpec};
 use std::sync::LazyLock;
 
@@ -35,13 +36,13 @@ fn create_binding_key(algo: HpkeAlgorithm, expiry_secs: u64) -> Result<KeyRecord
 /// * `-2` if the `out_pubkey` buffer is too small.
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn key_manager_generate_binding_keypair(
-    algo: HpkeAlgorithm,
+    algo: KmHpkeAlgorithm,
     expiry_secs: u64,
     out_uuid: *mut u8,
     out_pubkey: *mut u8,
     out_pubkey_len: *mut usize,
 ) -> i32 {
-    match create_binding_key(algo, expiry_secs) {
+    match create_binding_key(algo.into(), expiry_secs) {
         Ok(record) => {
             let id = record.meta.id;
             let pubkey = match &record.meta.spec {
@@ -79,6 +80,10 @@ pub unsafe extern "C" fn key_manager_generate_binding_keypair(
 mod tests {
     use super::*;
     use km_common::algorithms::{AeadAlgorithm, KdfAlgorithm, KemAlgorithm};
+    use km_common::ffi::{
+        KM_AEAD_ALGORITHM_AES_256_GCM, KM_KDF_ALGORITHM_HKDF_SHA256,
+        KM_KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256, KmHpkeAlgorithm,
+    };
 
     #[test]
     fn test_create_binding_key_success_and_zeroization() {
@@ -102,10 +107,10 @@ mod tests {
         let mut uuid_bytes = [0u8; 16];
         let mut pubkey_bytes = [0u8; 64];
         let mut pubkey_len: usize = pubkey_bytes.len();
-        let algo = HpkeAlgorithm {
-            kem: KemAlgorithm::DhkemX25519HkdfSha256 as i32,
-            kdf: KdfAlgorithm::HkdfSha256 as i32,
-            aead: AeadAlgorithm::Aes256Gcm as i32,
+        let algo = KmHpkeAlgorithm {
+            kem: KM_KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256,
+            kdf: KM_KDF_ALGORITHM_HKDF_SHA256,
+            aead: KM_AEAD_ALGORITHM_AES_256_GCM,
         };
 
         let result = unsafe {
@@ -129,10 +134,10 @@ mod tests {
         let mut uuid_bytes = [0u8; 16];
         let mut pubkey_bytes = [0u8; 64];
         let mut pubkey_len: usize = pubkey_bytes.len();
-        let algo = HpkeAlgorithm {
+        let algo = KmHpkeAlgorithm {
             kem: 999, // Invalid KEM
-            kdf: KdfAlgorithm::HkdfSha256 as i32,
-            aead: AeadAlgorithm::Aes256Gcm as i32,
+            kdf: KM_KDF_ALGORITHM_HKDF_SHA256,
+            aead: KM_AEAD_ALGORITHM_AES_256_GCM,
         };
 
         let result = unsafe {
@@ -151,10 +156,10 @@ mod tests {
 
     #[test]
     fn test_generate_binding_keypair_null_uuid_ptr() {
-        let algo = HpkeAlgorithm {
-            kem: KemAlgorithm::DhkemX25519HkdfSha256 as i32,
-            kdf: KdfAlgorithm::HkdfSha256 as i32,
-            aead: AeadAlgorithm::Aes256Gcm as i32,
+        let algo = KmHpkeAlgorithm {
+            kem: KM_KEM_ALGORITHM_DHKEM_X25519_HKDF_SHA256,
+            kdf: KM_KDF_ALGORITHM_HKDF_SHA256,
+            aead: KM_AEAD_ALGORITHM_AES_256_GCM,
         };
 
         // Pass null pointers, should succeed (return 0) but not crash
