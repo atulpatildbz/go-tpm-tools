@@ -317,6 +317,10 @@ func TestHandleGenerateKemFlexibleLifespan(t *testing.T) {
 	srv := NewServer(
 		&mockBindingKeyGen{uuid: uuid.New(), pubKey: make([]byte, 32)},
 		&mockKEMKeyGen{uuid: uuid.New(), pubKey: make([]byte, 32)},
+		noopDecapSealer(),
+		noopOpener(),
+		noopKEMDestroyer(),
+		noopBindingDestroyer(),
 	)
 
 	tests := []struct {

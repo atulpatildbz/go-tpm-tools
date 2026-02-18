@@ -4,6 +4,7 @@ use km_common::key_types::{KeyRecord, KeyRegistry, KeySpec};
 use std::slice;
 use std::sync::LazyLock;
 use std::time::Duration;
+use uuid::Uuid;
 
 static KEY_REGISTRY: LazyLock<KeyRegistry> = LazyLock::new(KeyRegistry::default);
 
@@ -247,7 +248,7 @@ mod tests {
         let binding_pubkey = [1u8; 32];
         let mut uuid_bytes = [0u8; 16];
         let mut pubkey_bytes = [0u8; 64];
-        let mut pubkey_len = pubkey_bytes.len();
+        let mut pubkey_len = 10; // Too small for 32-byte key
         let algo = HpkeAlgorithm {
             kem: KemAlgorithm::DhkemX25519HkdfSha256 as i32,
             kdf: KdfAlgorithm::HkdfSha256 as i32,

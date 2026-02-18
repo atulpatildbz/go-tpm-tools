@@ -15,7 +15,19 @@ int32_t key_manager_generate_binding_keypair(const uint8_t *algo_ptr,
                                              uint64_t expiry_secs,
                                              uint8_t *out_uuid,
                                              uint8_t *out_pubkey,
-                                             size_t out_pubkey_len);
+                                             size_t *out_pubkey_len);
+
+int32_t key_manager_open(const uint8_t *_uuid_bytes,
+                         const uint8_t *_enc,
+                         size_t _enc_len,
+                         const uint8_t *_ciphertext,
+                         size_t _ciphertext_len,
+                         const uint8_t *_aad,
+                         size_t _aad_len,
+                         uint8_t *_out_plaintext,
+                         size_t *_out_plaintext_len);
+
+int32_t key_manager_destroy_binding_key(const uint8_t *uuid_bytes);
 
 #ifdef __cplusplus
 }  // extern "C"

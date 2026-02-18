@@ -58,6 +58,11 @@ impl KeyRegistry {
         let mut keys = self.keys.write().unwrap();
         keys.insert(record.meta.id, record);
     }
+
+    pub fn remove_key(&self, id: &KeyHandle) -> Option<KeyRecord> {
+        let mut keys = self.keys.write().unwrap();
+        keys.remove(id)
+    }
 }
 
 impl KeyRecord {
