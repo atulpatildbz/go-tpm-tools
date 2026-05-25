@@ -76,13 +76,13 @@ steps:
       export GOTOOLCHAIN=auto
       go build -o ../image/launcher -ldflags="-extldflags=-Wl,-z,lazy -X 'main.BuildCommit=${SHORT_SHA}'"
 
-- name: 'gcr.io/cloud-builders/gcloud'
-  id: DownloadExpBinary
-  entrypoint: 'gcloud'
-  args: ['storage',
-          'cp',
-          'gs://confidential-space-images_third-party/confidential_space_experiments',
-          './launcher/image/confidential_space_experiments']
+#- name: 'gcr.io/cloud-builders/gcloud'
+#  id: DownloadExpBinary
+#  entrypoint: 'gcloud'
+#  args: ['storage',
+#          'cp',
+#          'gs://confidential-space-images_third-party/confidential_space_experiments',
+#          './launcher/image/confidential_space_experiments']
 
 # make sure the directory matches the base image
 - name: 'gcr.io/cloud-builders/gcloud'
@@ -108,7 +108,7 @@ steps:
 
 - name: 'gcr.io/cloud-builders/gcloud'
   id: DebugVgImageBuild
-  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadExpBinary', 'DownloadGpuDrivers']
+  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadGpuDrivers']
   env:
   - 'OUTPUT_IMAGE_NAME=${_OUTPUT_IMAGE_PREFIX}-vg-debug-${_OUTPUT_IMAGE_SUFFIX}'
   - 'OUTPUT_IMAGE_FAMILY=${_OUTPUT_IMAGE_FAMILY}-vg'
@@ -137,7 +137,7 @@ steps:
 
 - name: 'gcr.io/cloud-builders/gcloud'
   id: HardenedVgImageBuild
-  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadExpBinary', 'DownloadGpuDrivers']
+  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadGpuDrivers']
   env:
   - 'OUTPUT_IMAGE_NAME=${_OUTPUT_IMAGE_PREFIX}-vg-hardened-${_OUTPUT_IMAGE_SUFFIX}'
   - 'OUTPUT_IMAGE_FAMILY=${_OUTPUT_IMAGE_FAMILY}-vg'
@@ -167,7 +167,7 @@ steps:
 
 - name: 'gcr.io/cloud-builders/gcloud'
   id: DebugImageBuild
-  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadExpBinary', 'DownloadGpuDrivers']
+  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadGpuDrivers']
   env:
   - 'OUTPUT_IMAGE_NAME=${_OUTPUT_IMAGE_PREFIX}-debug-${_OUTPUT_IMAGE_SUFFIX}'
   - 'OUTPUT_IMAGE_FAMILY=${_OUTPUT_IMAGE_FAMILY}'
@@ -196,7 +196,7 @@ steps:
 
 - name: 'gcr.io/cloud-builders/gcloud'
   id: HardenedImageBuild
-  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadExpBinary', 'DownloadGpuDrivers']
+  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadGpuDrivers']
   env:
   - 'OUTPUT_IMAGE_NAME=${_OUTPUT_IMAGE_PREFIX}-hardened-${_OUTPUT_IMAGE_SUFFIX}'
   - 'OUTPUT_IMAGE_FAMILY=${_OUTPUT_IMAGE_FAMILY}'
@@ -226,7 +226,7 @@ steps:
 
 - name: 'gcr.io/cloud-builders/gcloud'
   id: DebugBcImageBuildAndExport
-  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadExpBinary', 'DownloadGpuDrivers']
+  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadGpuDrivers']
   env:
   - 'BC_BASE_IMAGE=$_BC_DEBUG_IMAGE'
   - 'BC_BASE_IMAGE_PROJECT=$_BC_BASE_IMAGE_PROJECT'
@@ -253,7 +253,7 @@ steps:
 
 - name: 'gcr.io/cloud-builders/gcloud'
   id: HardenedBcImageBuildAndExport
-  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadExpBinary', 'DownloadGpuDrivers']
+  waitFor: ['BaseImageIdent', 'LauncherCompile', 'DownloadGpuDrivers']
   env:
   - 'BC_BASE_IMAGE=$_BC_BASE_IMAGE'
   - 'BC_BASE_IMAGE_PROJECT=$_BC_BASE_IMAGE_PROJECT'
@@ -649,5 +649,3 @@ steps:
     gsutil cp measure_output_vg_debug_sha384.json gs://${PROJECT_ID}-rims/${OUTPUT_IMAGE_NAME}_sha384.json
 
 options:
-  pool:
-    name: 'projects/confidential-space-images-dev/locations/us-west1/workerPools/cs-image-build-vpc'

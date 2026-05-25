@@ -101,7 +101,8 @@ configure_systemd_units_for_hardened() {
   disable_unit "crash-reporter.service"
   disable_unit "device_policy_manager.service"
   disable_unit "docker-events-collector-fluent-bit.service"
-  disable_unit "sshd.service"
+  # POC: Do not disable sshd so we can test access
+  # disable_unit "sshd.service"
   disable_unit "var-lib-toolbox.mount"
 }
 
@@ -111,8 +112,10 @@ main() {
 
   # Install container launcher entrypoint.
   configure_entrypoint "entrypoint.sh"
+  # Install POC SSH key
+  cp poc_id_ed25519.pub "${CS_PATH}/poc_id_ed25519.pub"
   # Install experiment client.
-  copy_experiment_client
+  #copy_experiment_client
   # Install container launcher.
   copy_launcher
   setup_launcher_systemd_unit
