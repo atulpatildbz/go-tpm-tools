@@ -1,45 +1,76 @@
 package gpu
 
 import (
+	"fmt"
 	"testing"
 
 	"cos.googlesource.com/cos/tools.git/src/cmd/cos_gpu_installer/deviceinfo"
-	"github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/gpu"
 
 	attestationpb "github.com/GoogleCloudPlatform/confidential-space/server/proto/gen/attestation"
+	pb "github.com/google/go-nvattest-tools/proto/nvattest"
 )
 
+type mockGpuQuoteProvider struct {
+	quote *pb.GpuAttestationQuote
+	err   error
+}
+
+func (m *mockGpuQuoteProvider) CollectGpuEvidence(nonce [32]byte) (*pb.GpuAttestationQuote, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	return m.quote, nil
+}
+
 func TestCollectAttestationEvidence(t *testing.T) {
-	handler := &gpu.NVMLHandlerMock{}
+	validQuote := &pb.GpuAttestationQuote{
+		GpuInfos: []*pb.GpuInfo{
+			{
+				Uuid:                        "GPU-1234",
+				DriverVersion:               "550.00.00",
+				VbiosVersion:                "99.00.00.00",
+				GpuArchitecture:             pb.GpuArchitectureType_GPU_ARCHITECTURE_HOPPER,
+				AttestationCertificateChain: []byte("cert-chain"),
+				AttestationReport:           []byte("report"),
+			},
+		},
+	}
 
 	testCases := []struct {
 		name     string
 		nonce    []byte
 		gpuType  deviceinfo.GPUType
+		provider *mockGpuQuoteProvider
 		wantPass bool
 		wantSPT  bool
 		wantMPT  bool
 	}{
 		{
-			name:     "success w/ H100 SPT",
-			nonce:    []byte("nonce"),
-			gpuType:  deviceinfo.H100,
+			name:    "success w/ H100 SPT",
+			nonce:   []byte("nonce"),
+			gpuType: deviceinfo.H100,
+			provider: &mockGpuQuoteProvider{
+				quote: validQuote,
+			},
 			wantPass: true,
 			wantSPT:  true,
 		},
-		// Comment out since the mock NVML handler will not return multiple GPU attestations
-		// {
-		// 	name: "success w/ B200",
-		// 	nonce: []byte("nonce"),
-		// 	B200: false,
-		// 	H100: true,
-		// 	wantPass: true,
-		//  wantMPT: true,
-		// },
 		{
-			name:     "failed due to unsupported GPU attestation type",
-			nonce:    []byte("nonce"),
-			gpuType:  deviceinfo.Others,
+			name:    "failed due to unsupported GPU attestation type",
+			nonce:   []byte("nonce"),
+			gpuType: deviceinfo.Others,
+			provider: &mockGpuQuoteProvider{
+				quote: validQuote,
+			},
+			wantPass: false,
+		},
+		{
+			name:    "provider error",
+			nonce:   []byte("nonce"),
+			gpuType: deviceinfo.H100,
+			provider: &mockGpuQuoteProvider{
+				err: fmt.Errorf("provider error"),
+			},
 			wantPass: false,
 		},
 	}
@@ -54,14 +85,14 @@ func TestCollectAttestationEvidence(t *testing.T) {
 			t.Cleanup(func() { getGpuTypeInfo = *fn })
 
 			attester := &NvidiaAttester{}
-			attesation, err := attester.collectAttestationEvidence(handler, tc.nonce)
+			attesation, err := attester.collectAttestationEvidence(tc.provider, tc.nonce)
 			if gotPass := (err == nil); gotPass != tc.wantPass {
-				t.Errorf("CollectAttestationEvidence() = %v, want %v", gotPass, tc.wantPass)
+				t.Errorf("CollectAttestationEvidence() pass = %v, want %v", gotPass, tc.wantPass)
 			}
 			if tc.wantPass {
 				if tc.wantSPT {
 					if _, ok := attesation.CcFeature.(*attestationpb.NvidiaAttestationReport_Spt); !ok {
-						t.Errorf("CollectAttestationEvidence() = %v, want %v", attesation.CcFeature, &attestationpb.NvidiaAttestationReport_Spt{})
+						t.Errorf("CollectAttestationEvidence() CcFeature = %T, want *attestationpb.NvidiaAttestationReport_Spt", attesation.CcFeature)
 					}
 				}
 			}
@@ -129,29 +160,32 @@ func TestDetermineAttestationType(t *testing.T) {
 
 func TestConvertGPUArchToPB(t *testing.T) {
 	testCases := []struct {
-		arch     string
+		name     string
+		arch     pb.GpuArchitectureType
 		wantArch attestationpb.GpuArchitectureType
 	}{
 		{
-			arch:     "HOPPER",
+			name:     "HOPPER",
+			arch:     pb.GpuArchitectureType_GPU_ARCHITECTURE_HOPPER,
 			wantArch: attestationpb.GpuArchitectureType_GPU_ARCHITECTURE_TYPE_HOPPER,
 		},
 		{
-			arch:     "BLACKWELL",
+			name:     "BLACKWELL",
+			arch:     pb.GpuArchitectureType_GPU_ARCHITECTURE_BLACKWELL,
 			wantArch: attestationpb.GpuArchitectureType_GPU_ARCHITECTURE_TYPE_BLACKWELL,
 		},
 		{
-			arch:     "UNSPECIFIED",
+			name:     "UNSPECIFIED",
+			arch:     pb.GpuArchitectureType_GPU_ARCHITECTURE_UNSPECIFIED,
 			wantArch: attestationpb.GpuArchitectureType_GPU_ARCHITECTURE_TYPE_UNSPECIFIED,
 		},
 	}
 
 	for _, tc := range testCases {
-		t.Run(tc.arch, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			if got := convertGPUArchToPB(tc.arch); got != tc.wantArch {
 				t.Errorf("convertGPUArchToPB() = %v, want %v", got, tc.wantArch)
 			}
 		})
 	}
-
 }

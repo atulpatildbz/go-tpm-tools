@@ -4,11 +4,10 @@ import (
 	"crypto/sha256"
 	"fmt"
 
-	"encoding/base64"
-
 	"cos.googlesource.com/cos/tools.git/src/cmd/cos_gpu_installer/deviceinfo"
-	"github.com/NVIDIA/go-nvml/pkg/nvml"
-	"github.com/confidentsecurity/go-nvtrust/pkg/gonvtrust/gpu"
+	
+	"github.com/google/go-nvattest-tools/client"
+	pb "github.com/google/go-nvattest-tools/proto/nvattest"
 
 	attestationpb "github.com/GoogleCloudPlatform/confidential-space/server/proto/gen/attestation"
 	"github.com/google/go-tpm-tools/proto/attest"
@@ -50,7 +49,7 @@ func (a *NvidiaAttester) Attest(nonce []byte) (any, error) {
 	if a == nil {
 		return nil, fmt.Errorf("nil Nvidia attester")
 	}
-	gpuAttestation, err := a.collectAttestationEvidence(&gpu.DefaultNVMLHandler{}, nonce)
+	gpuAttestation, err := a.collectAttestationEvidence(&client.LinuxGpuQuoteProvider{}, nonce)
 	if err != nil {
 		return nil, err
 	}
@@ -83,57 +82,26 @@ func (a *NvidiaAttester) EnableReadyState() error {
 
 // collectAttestationEvidence assumes CC GPU devices are in place w/ driver support
 // and will try to collect raw attestation evidence and convert it to known data models.
-func (a *NvidiaAttester) collectAttestationEvidence(handler gpu.NvmlHandler, nonce []byte) (*attestationpb.NvidiaAttestationReport, error) {
-	gpuAdmin, err := gpu.NewNvmlGPUAdmin(handler)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create GPU admin: %v", err)
-	}
-	defer gpuAdmin.Shutdown()
-
+func (a *NvidiaAttester) collectAttestationEvidence(provider client.GpuQuoteProvider, nonce []byte) (*attestationpb.NvidiaAttestationReport, error) {
 	nvNonce := sha256.Sum256(nonce)
-	deviceInfos, err := gpuAdmin.CollectEvidence(nvNonce[:])
+
+	var nonce32 [32]byte
+	copy(nonce32[:], nvNonce[:])
+
+	quote, err := client.GpuQuote(provider, nonce32)
 	if err != nil {
 		return nil, fmt.Errorf("failed to collect GPU evidence: %v", err)
 	}
 
 	var gpuInfos []*attestationpb.GpuInfo
-	for i, deviceInfo := range deviceInfos {
-		device, ret := handler.DeviceGetHandleByIndex(i)
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("failed to get GPU device: %v", nvml.ErrorString(ret))
-		}
-		uuid, ret := device.GetUUID()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("failed to get GPU device UUID: %v", nvml.ErrorString(ret))
-		}
-
-		vbiosVersion, ret := device.GetVbiosVersion()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("failed to get GPU VBIOS version: %v", nvml.ErrorString(ret))
-		}
-
-		driverVersion, ret := handler.SystemGetDriverVersion()
-		if ret != nvml.SUCCESS {
-			return nil, fmt.Errorf("failed to get GPU driver version: %v", nvml.ErrorString(ret))
-		}
-
-		base64PEM, err := deviceInfo.Certificate().EncodeBase64()
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode GPU certificate chain: %v", err)
-		}
-
-		attestationCertChainData, err := base64.StdEncoding.DecodeString(base64PEM)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decode GPU certificate chain: %v", err)
-		}
-
+	for _, info := range quote.GpuInfos {
 		gpuInfo := &attestationpb.GpuInfo{
-			Uuid:                        uuid,
-			DriverVersion:               driverVersion,
-			VbiosVersion:                vbiosVersion,
-			GpuArchitectureType:         convertGPUArchToPB(deviceInfo.Arch()),
-			AttestationReport:           deviceInfo.AttestationReport(),
-			AttestationCertificateChain: attestationCertChainData,
+			Uuid:                        info.Uuid,
+			DriverVersion:               info.DriverVersion,
+			VbiosVersion:                info.VbiosVersion,
+			GpuArchitectureType:         convertGPUArchToPB(info.GpuArchitecture),
+			AttestationReport:           info.AttestationReport,
+			AttestationCertificateChain: info.AttestationCertificateChain,
 		}
 		gpuInfos = append(gpuInfos, gpuInfo)
 	}
@@ -176,11 +144,11 @@ func determineAttestationType(gpuInfos []*attestationpb.GpuInfo) attestationType
 	return SPT
 }
 
-func convertGPUArchToPB(arch string) attestationpb.GpuArchitectureType {
+func convertGPUArchToPB(arch pb.GpuArchitectureType) attestationpb.GpuArchitectureType {
 	switch arch {
-	case "HOPPER":
+	case pb.GpuArchitectureType_GPU_ARCHITECTURE_HOPPER:
 		return attestationpb.GpuArchitectureType_GPU_ARCHITECTURE_TYPE_HOPPER
-	case "BLACKWELL":
+	case pb.GpuArchitectureType_GPU_ARCHITECTURE_BLACKWELL:
 		return attestationpb.GpuArchitectureType_GPU_ARCHITECTURE_TYPE_BLACKWELL
 	default:
 		return attestationpb.GpuArchitectureType_GPU_ARCHITECTURE_TYPE_UNSPECIFIED
